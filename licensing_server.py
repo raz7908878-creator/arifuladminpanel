@@ -489,9 +489,9 @@ def licenses_view():
         
     # Sort filter
     if sort_filter == "expiry_asc":
-        query += " ORDER BY datetime(expires_at) ASC"
+        query += " ORDER BY expires_at::timestamp ASC"
     elif sort_filter == "expiry_desc":
-        query += " ORDER BY datetime(expires_at) DESC"
+        query += " ORDER BY expires_at::timestamp DESC"
     elif sort_filter == "created_asc":
         query += " ORDER BY id ASC"
     else:
@@ -743,7 +743,7 @@ def users_view():
                 COUNT(*) as total,
                 SUM(CASE WHEN is_active = 1 AND expires_at::timestamp >= %s::timestamp THEN 1 ELSE 0 END) as active,
                 SUM(CASE WHEN expires_at::timestamp < %s::timestamp THEN 1 ELSE 0 END) as expired,
-                group_concat(COALESCE(hwid, '')) as hwids,
+                string_agg(COALESCE(hwid, ''), ',') as hwids,
                 MAX(last_activated_at) as last_active
             FROM licenses 
             WHERE user_note IS NOT NULL AND trim(user_note) != ''
