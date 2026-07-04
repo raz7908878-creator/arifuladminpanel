@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Users - {{ dashboard_title }}{% endblock %}
+{% block page_title %}Registered Users & Customers{% endblock %}
+{% block page_subtitle %}Overview of all customer assignments, licenses, and hardware locks{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-users" style="color: var(--primary);"></i> User List</h3>
+        <div style="font-size: 13px; color: var(--text-muted);">
+            Grouped by User Note
+        </div>
+    </div>
+    
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>User / Customer Name</th>
+                    <th style="text-align: center;">Total Keys</th>
+                    <th style="text-align: center;">Active</th>
+                    <th style="text-align: center;">Expired</th>
+                    <th>Hardware Identifiers (HWIDs)</th>
+                    <th>Last Active Time</th>
+                    <th style="text-align: right;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td style="font-weight: 700; color: var(--primary);">{{ u.name }}</td>
+                    <td style="text-align: center; font-weight: 600;">{{ u.total }}</td>
+                    <td style="text-align: center; color: var(--success); font-weight: 600;">{{ u.active }}</td>
+                    <td style="text-align: center; color: var(--warning); font-weight: 600;">{{ u.expired }}</td>
+                    <td>
+                        {% if u.hwids %}
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 300px;">
+                            {% for hwid in u.hwids.split(',') %}
+                            {% if hwid.strip() %}
+                            <span style="font-family: monospace; font-size: 11px; background-color: var(--border-color); padding: 2px 6px; border-radius: 4px;" title="{{ hwid }}">{{ hwid[:12] }}{% if hwid|length > 12 %}...{% endif %}</span>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span style="color: var(--text-dim); font-style: italic; font-size: 13px;">None bound</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size: 13px; color: var(--text-muted);">{{ u.last_active or 'Never' }}</td>
+                    <td style="text-align: right;">
+                        <button class="btn btn-secondary btn-xs" onclick="viewUserDetails('{{ u.name }}')">
+                            <i class="fas fa-eye"></i> View Details
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not users %}
+                <tr>
+                    <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 40px 0;">
+                        <i class="fas fa-users-slash" style="font-size: 32px; color: var(--border-color); margin-bottom: 12px; display: block;"></i>
+                        No user assignments found. Generate licenses with a User Note to populate this directory.
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- User Details Modal -->
+<div id="userDetailsModal" class="modal">
+    <div class="modal-content" style="width: 750px; max-width: 95%;">
+        <div class="modal-header">
+            <h3 class="modal-title"><i class="fas fa-user-tag" style="color: var(--primary); margin-right: 8px;"></i> User: <span id="modal_username"></span></h3>
+            <button class="close-btn" onclick="closeModal('userDetailsModal')">&times;</button>
+        </div>
+        <div class="modal-body" style="padding-bottom: 10px;">
+            <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;">
+                <div class="stat-card" style="padding: 15px;">
+                    <div class="stat-title" style="font-size: 10px;">Total Keys</div>
+                    <div class="stat-value" id="user_total_keys" style="font-size: 22px;">0</div>
+                </div>
+                <div class="stat-card" style="padding: 15px; border-left: 3px solid var(--success);">
+                    <div class="stat-title" style="font-size: 10px;">Active Keys</div>
+                    <div class="stat-value" id="user_active_keys" style="font-size: 22px; color: var(--success);">0</div>
+                </div>
+                <div class="stat-card" style="padding: 15px; border-left: 3px solid var(--warning);">
+                    <div class="stat-title" style="font-size: 10px;">Expired Keys</div>
+                    <div class="stat-value" id="user_expired_keys" style="font-size: 22px; color: var(--warning);">0</div>
+                </div>
+            </div>
+            
+            <h4 style="margin-bottom: 10px; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Assigned Keys</h4>
+            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Key String</th>
+                            <th>Expires At</th>
+                            <th>HWID</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user_keys_table_body">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('userDetailsModal')">Close</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function viewUserDetails(username) {
+        document.getElementById('modal_username').innerText = username;
+        
+        // Fetch detailed licenses for this user note
+        fetch(`/api/v1/licenses?search=${encodeURIComponent(username)}&status=all&limit=100`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    const licenses = data.licenses;
+                    
+                    // Filter to match exactly (search in API is substring)
+                    const userLicenses = licenses.filter(lic => lic.user_note === username);
+                    
+                    let active = 0;
+                    let expired = 0;
+                    const tableBody = document.getElementById('user_keys_table_body');
+                    tableBody.innerHTML = '';
+                    
+                    userLicenses.forEach(lic => {
+                        if (lic.is_expired) expired++;
+                        else if (lic.is_active === 1) active++;
+                        
+                        let statusBadge = '';
+                        if (lic.is_expired) {
+                            statusBadge = '<span class="badge badge-warning">EXPIRED</span>';
+                        } else if (lic.is_active === 1) {
+                            statusBadge = '<span class="badge badge-success">ACTIVE</span>';
+                        } else {
+                            statusBadge = '<span class="badge badge-danger">BLOCKED</span>';
+                        }
+                        
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-family:monospace; font-weight:700; color:var(--primary);">${lic.key_string}</span>
+                                    <button class="btn btn-secondary btn-icon btn-xs" onclick="copyToClipboard('${lic.key_string}')"><i class="far fa-copy"></i></button>
+                                </div>
+                            </td>
+                            <td style="font-size:13px; color:var(--text-muted);">${lic.expires_at}</td>
+                            <td><span style="font-family:monospace; font-size:11px;">${lic.hwid || '<span style="color:var(--text-dim); font-style:italic">None</span>'}</span></td>
+                            <td>${statusBadge}</td>
+                        `;
+                        tableBody.appendChild(tr);
+                    });
+                    
+                    document.getElementById('user_total_keys').innerText = userLicenses.length;
+                    document.getElementById('user_active_keys').innerText = active;
+                    document.getElementById('user_expired_keys').innerText = expired;
+                    
+                    openModal('userDetailsModal');
+                } else {
+                    showToast('Failed to load user details', 'danger');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('Failed to load user details', 'danger');
+            });
+    }
+</script>
+{% endblock %}

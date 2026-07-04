@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Licenses - {{ dashboard_title }}{% endblock %}
+{% block page_title %}License Key Management{% endblock %}
+{% block page_subtitle %}Generate, manage, block, and analyze licensing keys{% endblock %}
+
+{% block top_actions %}
+<div style="display: flex; gap: 10px;">
+    <button class="btn btn-primary" onclick="openModal('bulkGenerateModal')">
+        <i class="fas fa-plus"></i> Bulk Generate
+    </button>
+    <button class="btn btn-secondary" onclick="openModal('importCsvModal')">
+        <i class="fas fa-file-import"></i> Import CSV
+    </button>
+    <a href="{{ url_for('export_csv') }}" class="btn btn-secondary">
+        <i class="fas fa-file-export"></i> Export CSV
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <!-- Filter/Search Bar -->
+    <form method="GET" action="{{ url_for('licenses_view') }}" id="filterForm">
+        <div class="filter-bar">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" name="search" placeholder="Search keys or notes..." value="{{ search_query }}" onchange="document.getElementById('filterForm').submit();">
+            </div>
+            
+            <div class="filters-group">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="margin-bottom: 0;">Status:</label>
+                    <select name="status" style="width: 120px;" onchange="document.getElementById('filterForm').submit();">
+                        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Keys</option>
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+                        <option value="blocked" {% if status_filter == 'blocked' %}selected{% endif %}>Blocked</option>
+                        <option value="expired" {% if status_filter == 'expired' %}selected{% endif %}>Expired</option>
+                    </select>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="margin-bottom: 0;">Sort Expiry:</label>
+                    <select name="sort" style="width: 160px;" onchange="document.getElementById('filterForm').submit();">
+                        <option value="expiry_desc" {% if sort_filter == 'expiry_desc' %}selected{% endif %}>Expiry (Newest First)</option>
+                        <option value="expiry_asc" {% if sort_filter == 'expiry_asc' %}selected{% endif %}>Expiry (Oldest First)</option>
+                        <option value="created_desc" {% if sort_filter == 'created_desc' %}selected{% endif %}>Created (Newest First)</option>
+                        <option value="created_asc" {% if sort_filter == 'created_asc' %}selected{% endif %}>Created (Oldest First)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <!-- License Table -->
+    <form action="{{ url_for('bulk_delete_licenses') }}" method="POST" id="bulkDeleteForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 40px; text-align: center;">
+                            <input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)">
+                        </th>
+                        <th>License Key</th>
+                        <th>User Note</th>
+                        <th>HWID Info</th>
+                        <th>Created At</th>
+                        <th>Expires At</th>
+                        <th>Status</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lic in licenses %}
+                    <tr>
+                        <td style="text-align: center;">
+                            <input type="checkbox" name="license_ids" value="{{ lic.id }}" class="license-checkbox" onclick="updateBulkDeleteBtn()">
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-family: monospace; font-weight: 700; color: var(--primary); font-size: 14px;">{{ lic.key_string }}</span>
+                                <button type="button" class="btn btn-secondary btn-icon btn-xs" onclick="copyToClipboard('{{ lic.key_string }}', this)" title="Copy Key">
+                                    <i class="far fa-copy"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td style="font-weight: 500;">{{ lic.user_note or '-' }}</td>
+                        <td>
+                            {% if lic.hwid %}
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-family: monospace; font-size: 11px; background-color: var(--border-color); padding: 2px 6px; border-radius: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ lic.hwid }}">{{ lic.hwid }}</span>
+                                <a href="{{ url_for('action_reset_hwid', id=lic.id) }}" class="btn btn-secondary btn-icon btn-xs" style="color: var(--warning);" title="Reset HWID">
+                                    <i class="fas fa-undo"></i>
+                                </a>
+                            </div>
+                            {% else %}
+                            <span style="color: var(--text-dim); font-style: italic; font-size: 13px;">Unbound</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size: 13px; color: var(--text-muted);">{{ lic.created_at }}</td>
+                        <td style="font-size: 13px; color: var(--text-muted);">{{ lic.expires_at }}</td>
+                        <td>
+                            {% if lic.is_expired %}
+                            <span class="badge badge-warning">EXPIRED</span>
+                            {% elif lic.is_active == 1 %}
+                            <span class="badge badge-success">ACTIVE</span>
+                            {% else %}
+                            <span class="badge badge-danger">BLOCKED</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">
+                            <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                                <button type="button" class="btn btn-secondary btn-xs" onclick="openEditModal('{{ lic.id }}', '{{ lic.key_string }}', '{{ lic.user_note or '' }}', '{{ lic.expires_at }}')" title="Edit License">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                                
+                                {% if lic.is_active == 1 %}
+                                <a href="{{ url_for('action_toggle_status', id=lic.id) }}" class="btn btn-warning btn-xs" title="Block License">
+                                    <i class="fas fa-ban"></i> Block
+                                </a>
+                                {% else %}
+                                <a href="{{ url_for('action_toggle_status', id=lic.id) }}" class="btn btn-success btn-xs" title="Unblock License">
+                                    <i class="fas fa-check"></i> Unlock
+                                </a>
+                                {% endif %}
+                                
+                                <a href="{{ url_for('action_delete_key', id=lic.id) }}" class="btn btn-danger btn-xs" onclick="return confirm('Confirm key deletion? Client verifications with this key will stop working.');" title="Delete Key">
+                                    <i class="fas fa-trash-alt"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    
+                    {% if not licenses %}
+                    <tr>
+                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+                            <i class="fas fa-search" style="font-size: 32px; color: var(--border-color); margin-bottom: 12px; display: block;"></i>
+                            No licenses found. Try adjusting filters or generate new keys.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Bulk Delete Trigger -->
+        <div style="margin-top: 15px; display: none;" id="bulkActionsContainer">
+            <button type="submit" class="btn btn-danger btn-xs" onclick="return confirm('Delete selected keys? Action cannot be undone.');">
+                <i class="fas fa-trash-alt"></i> Bulk Delete Selected
+            </button>
+        </div>
+    </form>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        <div>
+            Showing {{ (page - 1) * per_page + 1 }} to {{ min_value(page * per_page, total_count) }} of {{ total_count }} licenses
+        </div>
+        <div class="pagination-buttons">
+            {% if page > 1 %}
+            <a href="{{ url_for('licenses_view', page=page-1, search=search_query, status=status_filter, sort=sort_filter) }}" class="btn btn-secondary btn-xs"><i class="fas fa-chevron-left"></i> Prev</a>
+            {% else %}
+            <button class="btn btn-secondary btn-xs" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+            {% endif %}
+            
+            <span style="display: flex; align-items: center; padding: 0 10px;">Page {{ page }} of {{ total_pages }}</span>
+            
+            {% if page < total_pages %}
+            <a href="{{ url_for('licenses_view', page=page+1, search=search_query, status=status_filter, sort=sort_filter) }}" class="btn btn-secondary btn-xs">Next <i class="fas fa-chevron-right"></i></a>
+            {% else %}
+            <button class="btn btn-secondary btn-xs" disabled>Next <i class="fas fa-chevron-right"></i></button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Bulk Generate Modal -->
+<div id="bulkGenerateModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Bulk Generate Licenses</h3>
+            <button class="close-btn" onclick="closeModal('bulkGenerateModal')">&times;</button>
+        </div>
+        <form action="{{ url_for('bulk_generate_licenses') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Prefix / Custom Key (Optional)</label>
+                    <input type="text" name="custom_key" placeholder="e.g. SPECIAL-PRO">
+                    <small style="color: var(--text-dim); display: block; margin-top: 4px;">If generating quantity > 1, suffixes -1, -2, etc. will be appended.</small>
+                </div>
+                <div class="form-group">
+                    <label>User Note / Customer Name</label>
+                    <input type="text" name="user_note" placeholder="e.g. SRF Customer">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Validity Duration</label>
+                        <select name="duration">
+                            <option value="1">1 Day</option>
+                            <option value="7">7 Days</option>
+                            <option value="30" selected>30 Days</option>
+                            <option value="365">365 Days</option>
+                            <option value="9999">Lifetime</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" name="quantity" min="1" max="1000" value="1" required>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('bulkGenerateModal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Generate</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit License Modal -->
+<div id="editLicenseModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Edit License</h3>
+            <button class="close-btn" onclick="closeModal('editLicenseModal')">&times;</button>
+        </div>
+        <form action="{{ url_for('edit_license') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" id="edit_license_id" name="id">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>License Key</label>
+                    <input type="text" id="edit_key_string" readonly style="background-color: rgba(255,255,255,0.03); color: var(--text-muted); cursor: not-allowed;">
+                </div>
+                <div class="form-group">
+                    <label>User Note</label>
+                    <input type="text" id="edit_user_note" name="user_note" required>
+                </div>
+                <div class="form-group">
+                    <label>Expiry Date</label>
+                    <input type="text" id="edit_expires_at" name="expires_at" placeholder="YYYY-MM-DD HH:MM:SS" required>
+                    <small style="color: var(--text-dim); display: block; margin-top: 4px;">Format: YYYY-MM-DD HH:MM:SS</small>
+                </div>
+                <div class="form-group">
+                    <label>Quick Extend Expiration</label>
+                    <select id="quick_extend" onchange="extendExpiry(this.value)">
+                        <option value="">-- Select days to add --</option>
+                        <option value="7">Add 7 Days</option>
+                        <option value="30">Add 30 Days</option>
+                        <option value="90">Add 90 Days</option>
+                        <option value="365">Add 365 Days</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('editLicenseModal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Import CSV Modal -->
+<div id="importCsvModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Import Licenses via CSV</h3>
+            <button class="close-btn" onclick="closeModal('importCsvModal')">&times;</button>
+        </div>
+        <form action="{{ url_for('import_csv') }}" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Select CSV File</label>
+                    <input type="file" name="csv_file" accept=".csv" required>
+                </div>
+                <div style="background-color: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; font-size: 12px; color: var(--text-muted); border: 1px solid var(--border-color);">
+                    <strong>CSV Format Requirements:</strong>
+                    <ul style="margin-left: 20px; margin-top: 6px;">
+                        <li>Required Headers: <code>key_string</code>, <code>expires_at</code></li>
+                        <li>Optional Headers: <code>hwid</code>, <code>is_active</code>, <code>user_note</code></li>
+                        <li>Date Format: <code>YYYY-MM-DD HH:MM:SS</code></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('importCsvModal')">Cancel</button>
+                <button type="submit" class="btn btn-success"><i class="fas fa-file-upload"></i> Upload & Import</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function toggleSelectAll(master) {
+        const checkboxes = document.querySelectorAll('.license-checkbox');
+        checkboxes.forEach(cb => {
+            cb.checked = master.checked;
+        });
+        updateBulkDeleteBtn();
+    }
+
+    function updateBulkDeleteBtn() {
+        const checkedCount = document.querySelectorAll('.license-checkbox:checked').length;
+        const bulkBtnContainer = document.getElementById('bulkActionsContainer');
+        if (checkedCount > 0) {
+            bulkBtnContainer.style.display = 'block';
+        } else {
+            bulkBtnContainer.style.display = 'none';
+        }
+    }
+
+    function openEditModal(id, keyString, userNote, expiresAt) {
+        document.getElementById('edit_license_id').value = id;
+        document.getElementById('edit_key_string').value = keyString;
+        document.getElementById('edit_user_note').value = userNote;
+        document.getElementById('edit_expires_at').value = expiresAt;
+        document.getElementById('quick_extend').value = '';
+        openModal('editLicenseModal');
+    }
+
+    function extendExpiry(days) {
+        if (!days) return;
+        const expiryInput = document.getElementById('edit_expires_at');
+        const currentVal = expiryInput.value.trim();
+        let baseDate = new Date();
+        
+        // Try parsing current value, if not valid use now
+        if (currentVal) {
+            const parsed = Date.parse(currentVal.replace(' ', 'T'));
+            if (!isNaN(parsed)) {
+                baseDate = new Date(parsed);
+            }
+        }
+        
+        baseDate.setDate(baseDate.getDate() + parseInt(days));
+        
+        // Format as YYYY-MM-DD HH:MM:SS
+        const year = baseDate.getFullYear();
+        const month = String(baseDate.getMonth() + 1).padStart(2, '0');
+        const date = String(baseDate.getDate()).padStart(2, '0');
+        const hours = String(baseDate.getHours()).padStart(2, '0');
+        const minutes = String(baseDate.getMinutes()).padStart(2, '0');
+        const seconds = String(baseDate.getSeconds()).padStart(2, '0');
+        
+        expiryInput.value = `${year}-${month}-${date} ${hours}:${minutes}:${seconds}`;
+    }
+</script>
+{% endblock %}

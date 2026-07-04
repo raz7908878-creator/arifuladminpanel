@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>{% block title %}{{ dashboard_title }}{% endblock %}</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-logo">{{ dashboard_logo }}</span>
+                <span class="brand-name">{{ dashboard_title }}</span>
+            </div>
+            
+            <ul class="sidebar-menu">
+                <li class="sidebar-item {% if active_page == 'dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('dashboard') }}">
+                        <i class="fas fa-chart-pie"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li class="sidebar-item {% if active_page == 'licenses' %}active{% endif %}">
+                    <a href="{{ url_for('licenses_view') }}">
+                        <i class="fas fa-key"></i>
+                        <span>License Keys</span>
+                    </a>
+                </li>
+                <li class="sidebar-item {% if active_page == 'users' %}active{% endif %}">
+                    <a href="{{ url_for('users_view') }}">
+                        <i class="fas fa-users"></i>
+                        <span>Users</span>
+                    </a>
+                </li>
+                <li class="sidebar-item {% if active_page == 'security' %}active{% endif %}">
+                    <a href="{{ url_for('security_view') }}">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>Security</span>
+                    </a>
+                </li>
+                <li class="sidebar-item {% if active_page == 'settings' %}active{% endif %}">
+                    <a href="{{ url_for('settings_view') }}">
+                        <i class="fas fa-cog"></i>
+                        <span>Settings</span>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <div class="username">{{ session.username or 'Admin' }}</div>
+                        <div class="role">Administrator</div>
+                    </div>
+                </div>
+                <a href="{{ url_for('logout') }}" class="btn btn-icon btn-secondary" title="Logout" style="color: var(--danger)">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Body -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <div class="top-bar">
+                <div class="page-title">
+                    <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+                    <p>{% block page_subtitle %}Overview of system activity and stats{% endblock %}</p>
+                </div>
+                <div class="top-actions">
+                    <button id="sidebar-toggle" class="btn btn-secondary btn-icon" style="display: none;">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    {% block top_actions %}{% endblock %}
+                </div>
+            </div>
+
+            <!-- Content Slot -->
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container"></div>
+
+    <!-- Global Javascript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    <!-- Flash Messages Handler -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        showToast("{{ message }}", "{{ 'success' if category == 'success' else 'danger' if category == 'danger' else 'warning' if category == 'warning' else 'info' }}");
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

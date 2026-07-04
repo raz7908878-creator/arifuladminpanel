@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - {{ dashboard_title }}</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-logo">{{ dashboard_logo }}</div>
+            <h1 class="login-title">{{ dashboard_title }}</h1>
+            <p class="login-subtitle">Secure admin control panel & key manager</p>
+
+            {% if error %}
+            <div class="alert" style="background-color: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 20px; text-align: center; font-size: 14px;">
+                <i class="fas fa-exclamation-circle mr-2"></i> {{ error }}
+            </div>
+            {% endif %}
+
+            <form action="{{ url_for('index') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <div style="position: relative;">
+                        <input type="text" id="username" name="username" required placeholder="Enter username" style="padding-left: 40px;">
+                        <i class="fas fa-user" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-dim);"></i>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div style="position: relative;">
+                        <input type="password" id="password" name="password" required placeholder="Enter password" style="padding-left: 40px;">
+                        <i class="fas fa-lock" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-dim);"></i>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; display: flex; justify-content: center; height: 46px; margin-top: 10px;">
+                    <i class="fas fa-sign-in-alt"></i> Secure Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

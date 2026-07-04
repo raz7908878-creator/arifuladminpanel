@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - {{ dashboard_title }}{% endblock %}
+{% block page_title %}System Settings{% endblock %}
+{% block page_subtitle %}Customize the application dashboard, manage databases, and configure developer APIs{% endblock %}
+
+{% block content %}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <!-- General Customization -->
+    <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-sliders-h" style="color: var(--primary);"></i> Appearance Settings</h3>
+            </div>
+            <form action="{{ url_for('settings_update_appearance') }}" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                
+                <div class="form-group">
+                    <label for="dashboard_title">Dashboard Title</label>
+                    <input type="text" id="dashboard_title" name="dashboard_title" value="{{ dashboard_title }}" required placeholder="e.g. My Admin Dashboard">
+                </div>
+                
+                <div class="form-group">
+                    <label for="dashboard_logo">Dashboard Logo (Emoji / Icon)</label>
+                    <input type="text" id="dashboard_logo" name="dashboard_logo" value="{{ dashboard_logo }}" required placeholder="e.g. 🔐 or 🚀">
+                    <small style="color: var(--text-dim); display: block; margin-top: 4px;">Put a single character (emoji) or simple HTML icon code.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="logo_image">Or Upload Custom Logo Image</label>
+                    <input type="file" id="logo_image" name="logo_image" accept="image/*">
+                    <small style="color: var(--text-dim); display: block; margin-top: 4px;">Supports PNG, JPEG, GIF. Will overwrite logo image if selected.</small>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%; display: flex; justify-content: center; margin-top: 15px;">
+                    <i class="fas fa-save"></i> Save Settings
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- API Configuration -->
+    <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-network-wired" style="color: #a855f7;"></i> Developer API Key</h3>
+            </div>
+            
+            <div style="background-color: rgba(255,255,255,0.02); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 20px;">
+                <label>REST API Authentication Key</label>
+                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                    <input type="text" id="api_key_field" readonly value="{{ api_key }}" style="font-family: monospace; background-color: #0b0f19; text-align: center; font-weight: 600; color: #a855f7;">
+                    <button class="btn btn-secondary btn-icon" onclick="copyToClipboard('{{ api_key }}', this)" title="Copy Key">
+                        <i class="far fa-copy"></i>
+                    </button>
+                </div>
+                <small style="color: var(--text-dim); display: block; margin-top: 8px;">
+                    Include this key as header: <code>X-API-Key: {{ api_key[:6] }}...</code> or in query param <code>?api_key=...</code> to call management endpoints.
+                </small>
+            </div>
+            
+            <form action="{{ url_for('settings_regenerate_api') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-warning" onclick="return confirm('Regenerate API Key? Existing scripts/applications using the old key will fail.');" style="width: 100%; display: flex; justify-content: center; background-color: #a855f7; border-color: #a855f7;">
+                    <i class="fas fa-sync-alt"></i> Regenerate API Key
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Database Backups and Restore -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header" style="justify-content: space-between;">
+        <h3 class="card-title"><i class="fas fa-database" style="color: var(--success);"></i> Database Backup & Restore</h3>
+        <a href="{{ url_for('settings_create_backup') }}" class="btn btn-success btn-xs">
+            <i class="fas fa-file-medical"></i> Create Backup Now
+        </a>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+        <p style="color: var(--text-muted); font-size: 14px;">
+            SQLite databases are fully self-contained. Backups are stored inside <code>/backups/</code> folder as timestamped SQLite files.
+        </p>
+    </div>
+    
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Backup File Name</th>
+                    <th>File Size</th>
+                    <th>Created Time</th>
+                    <th style="text-align: right;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in backups %}
+                <tr>
+                    <td style="font-family: monospace; font-weight: 600; color: var(--text-main);">{{ b.name }}</td>
+                    <td>{{ (b.size / 1024) | round(2) }} KB</td>
+                    <td style="font-size: 13px; color: var(--text-muted);">{{ b.created }}</td>
+                    <td style="text-align: right;">
+                        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                            <a href="{{ url_for('settings_restore_backup', filename=b.name) }}" class="btn btn-warning btn-xs" onclick="return confirm('Restore this database backup? Current database will be overwritten.');">
+                                <i class="fas fa-file-import"></i> Restore
+                            </a>
+                            <a href="{{ url_for('settings_delete_backup', filename=b.name) }}" class="btn btn-danger btn-xs" onclick="return confirm('Delete this backup file permanently?');">
+                                <i class="fas fa-trash-alt"></i> Delete
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not backups %}
+                <tr>
+                    <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px 0;">
+                        <i class="fas fa-folder-open" style="font-size: 28px; color: var(--border-color); display: block; margin-bottom: 10px;"></i>
+                        No database backups found. Click "Create Backup Now" to make a snapshot.
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

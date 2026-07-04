@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ dashboard_title }}{% endblock %}
+{% block page_title %}Dashboard Overview{% endblock %}
+{% block page_subtitle %}Live metrics and activation analytics{% endblock %}
+
+{% block content %}
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-header">
+            <span class="stat-title">Total Keys</span>
+            <div class="stat-icon"><i class="fas fa-key"></i></div>
+        </div>
+        <div class="stat-value">{{ stats.total }}</div>
+    </div>
+    
+    <div class="stat-card" style="border-left: 4px solid var(--success)">
+        <div class="stat-header">
+            <span class="stat-title">Active Keys</span>
+            <div class="stat-icon" style="color: var(--success)"><i class="fas fa-check"></i></div>
+        </div>
+        <div class="stat-value" style="color: var(--success)">{{ stats.active }}</div>
+    </div>
+    
+    <div class="stat-card" style="border-left: 4px solid var(--warning)">
+        <div class="stat-header">
+            <span class="stat-title">Expired Keys</span>
+            <div class="stat-icon" style="color: var(--warning)"><i class="fas fa-hourglass-end"></i></div>
+        </div>
+        <div class="stat-value" style="color: var(--warning)">{{ stats.expired }}</div>
+    </div>
+
+    <div class="stat-card" style="border-left: 4px solid var(--danger)">
+        <div class="stat-header">
+            <span class="stat-title">Blocked Keys</span>
+            <div class="stat-icon" style="color: var(--danger)"><i class="fas fa-ban"></i></div>
+        </div>
+        <div class="stat-value" style="color: var(--danger)">{{ stats.blocked }}</div>
+    </div>
+
+    <div class="stat-card" style="border-left: 4px solid var(--info)">
+        <div class="stat-header">
+            <span class="stat-title">HWID Bound</span>
+            <div class="stat-icon" style="color: var(--info)"><i class="fas fa-laptop-code"></i></div>
+        </div>
+        <div class="stat-value" style="color: var(--info)">{{ stats.bound }}</div>
+    </div>
+
+    <div class="stat-card" style="border-left: 4px solid #a855f7">
+        <div class="stat-header">
+            <span class="stat-title">Today's Activations</span>
+            <div class="stat-icon" style="color: #a855f7"><i class="fas fa-bolt"></i></div>
+        </div>
+        <div class="stat-value" style="color: #a855f7">{{ stats.today_activations }}</div>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div class="charts-grid">
+    <!-- Activation History Graph -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-chart-line" style="color: var(--primary)"></i> Activation History</h3>
+            <div class="filters-group">
+                <button class="btn btn-secondary btn-xs active" id="btn-daily" onclick="toggleChart('daily')">Daily</button>
+                <button class="btn btn-secondary btn-xs" id="btn-monthly" onclick="toggleChart('monthly')">Monthly</button>
+            </div>
+        </div>
+        <div style="position: relative; height: 300px; width: 100%;">
+            <canvas id="activationChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Status Distribution Pie -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-chart-pie" style="color: #a855f7"></i> Keys Status</h3>
+        </div>
+        <div style="position: relative; height: 300px; width: 100%; display: flex; justify-content: center; align-items: center;">
+            <canvas id="statusChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <!-- Recent Activity Log -->
+    <div class="card" style="grid-column: span 2;">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-history" style="color: var(--warning)"></i> Recent Activity Logs</h3>
+            <a href="{{ url_for('security_view') }}" class="btn btn-secondary btn-xs">View All Logs</a>
+        </div>
+        <ul class="log-list">
+            {% for log in recent_activity %}
+            <li class="log-item">
+                <div>
+                    <span style="font-weight: 600; color: {% if 'Success' in log.action or 'Verify' in log.action %}var(--success){% elif 'Fail' in log.action or 'Block' in log.action or 'Delete' in log.action %}var(--danger){% else %}var(--primary){% endif %}">
+                        {{ log.action }}
+                    </span>
+                    <span style="color: var(--text-dim); margin-left: 10px;">by {{ log.username or 'System' }}</span>
+                </div>
+                <div class="log-meta">
+                    <span style="margin-right: 15px;"><i class="fas fa-network-wired"></i> {{ log.ip_address }}</span>
+                    <span><i class="far fa-clock"></i> {{ log.created_at }}</span>
+                </div>
+            </li>
+            {% endfor %}
+            {% if not recent_activity %}
+            <li class="log-item" style="justify-content: center; color: var(--text-dim)">
+                No recent activity logs.
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Data passed from backend
+    const dailyLabels = {{ chart_data.daily_labels | tojson }};
+    const dailyData = {{ chart_data.daily_data | tojson }};
+    const monthlyLabels = {{ chart_data.monthly_labels | tojson }};
+    const monthlyData = {{ chart_data.monthly_data | tojson }};
+    
+    const statusData = [
+        {{ stats.active }},
+        {{ stats.blocked }},
+        {{ stats.expired }}
+    ];
+
+    let currentChartType = 'daily';
+    let activationChart = null;
+
+    // Chart.js Theme Configuration for Dark Mode
+    Chart.defaults.color = '#9ca3af';
+    Chart.defaults.borderColor = '#222b45';
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize Activation History Chart
+        const ctx = document.getElementById('activationChart').getContext('2d');
+        activationChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dailyLabels,
+                datasets: [{
+                    label: 'Activations',
+                    data: dailyData,
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2,
+                    pointBackgroundColor: '#6366f1',
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                }
+            }
+        });
+
+        // Initialize Status Distribution Chart
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Active', 'Blocked', 'Expired'],
+                datasets: [{
+                    data: statusData,
+                    backgroundColor: ['#10b981', '#ef4444', '#f59e0b'],
+                    borderColor: '#151b2e',
+                    borderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 20 }
+                    }
+                },
+                cutout: '70%'
+            }
+        });
+    });
+
+    function toggleChart(type) {
+        if (currentChartType === type) return;
+        currentChartType = type;
+        
+        document.getElementById('btn-daily').classList.toggle('active', type === 'daily');
+        document.getElementById('btn-monthly').classList.toggle('active', type === 'monthly');
+        
+        if (type === 'daily') {
+            activationChart.data.labels = dailyLabels;
+            activationChart.data.datasets[0].data = dailyData;
+            activationChart.data.datasets[0].borderColor = '#6366f1';
+            activationChart.data.datasets[0].backgroundColor = 'rgba(99, 102, 241, 0.1)';
+        } else {
+            activationChart.data.labels = monthlyLabels;
+            activationChart.data.datasets[0].data = monthlyData;
+            activationChart.data.datasets[0].borderColor = '#a855f7';
+            activationChart.data.datasets[0].backgroundColor = 'rgba(168, 85, 247, 0.1)';
+        }
+        activationChart.update();
+    }
+</script>
+{% endblock %}
