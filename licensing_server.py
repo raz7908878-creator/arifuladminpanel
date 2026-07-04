@@ -407,7 +407,7 @@ def dashboard():
         today_date = datetime.now().strftime("%Y-%m-%d")
         cursor.execute("""
             SELECT COUNT(*) FROM activity_logs 
-            WHERE action LIKE 'Verification Success%' AND created_at::date = ?
+            WHERE action LIKE 'Verification Success%%' AND created_at::date = ?
         """, (today_date,))
         today_activations = cursor.fetchone()[0]
         
@@ -423,7 +423,7 @@ def dashboard():
             daily_labels.append((datetime.now() - timedelta(days=i)).strftime("%a %d"))
             cursor.execute("""
                 SELECT COUNT(*) FROM activity_logs 
-                WHERE action LIKE 'Verification Success%' AND created_at::date = ?
+                WHERE action LIKE 'Verification Success%%' AND created_at::date = ?
             """, (day,))
             daily_data.append(cursor.fetchone()[0])
             
@@ -437,7 +437,7 @@ def dashboard():
             monthly_labels.append(target_date.strftime("%b"))
             cursor.execute("""
                 SELECT COUNT(*) FROM activity_logs 
-                WHERE action LIKE 'Verification Success%' AND to_char(created_at::timestamp, 'YYYY-MM') = ?
+                WHERE action LIKE 'Verification Success%%' AND to_char(created_at::timestamp, 'YYYY-MM') = ?
             """, (month_str,))
             monthly_data.append(cursor.fetchone()[0])
             
