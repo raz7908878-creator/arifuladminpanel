@@ -44,6 +44,11 @@ DEFAULT_ADMIN_PASS = "AAfifaAfi128"  # Legacy plain password, hashed on database
 
 app = Flask(__name__)
 
+# Silence Werkzeug traffic logs
+import logging
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
 # --- Directory Initialization ---
 def init_directories():
     os.makedirs(DB_DIR, exist_ok=True)
