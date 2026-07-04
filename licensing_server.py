@@ -116,7 +116,7 @@ def get_db():
         print("[WARNING] DATABASE_URL not set. Please set it to a PostgreSQL connection string.")
         db_url = "postgresql://postgres:password@localhost:5432/licenses"
     conn = psycopg2.connect(db_url)
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    conn.cursor_factory = psycopg2.extras.DictCursor
     return PostgresDBWrapper(conn)
 
 def hash_sha256(data: str) -> str:
